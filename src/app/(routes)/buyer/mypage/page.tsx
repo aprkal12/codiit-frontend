@@ -49,6 +49,7 @@ export default function MyPage() {
   });
 
   const allOrders = data?.pages.flatMap((page) => page.orders) ?? [];
+  const visibleOrders = allOrders.filter((order) => order.orderItems.some((item) => item.product));
 
   return (
     <div className="min-h-screen bg-white">
@@ -73,13 +74,13 @@ export default function MyPage() {
               />
               {isLoading ? (
                 <div className="flex justify-center py-8">로딩 중...</div>
-              ) : allOrders.length === 0 ? (
+              ) : visibleOrders.length === 0 ? (
                 <div className="flex justify-center py-8 text-gray-500">
                   {selectedTab === "WaitingPayment" ? "결제 대기 중인 주문이 없습니다." : "주문 내역이 없습니다."}
                 </div>
               ) : (
                 <div className="h-[600px] overflow-y-auto px-5">
-                  {allOrders.map((order: Order) => (
+                  {visibleOrders.map((order: Order) => (
                     <MypageItemCard
                       key={order.id}
                       order={order}
