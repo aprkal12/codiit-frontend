@@ -3,11 +3,13 @@
 import { connectNotificationSSE, getNotifications } from "@/lib/api/notification";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
+import { useToaster } from "@/proviers/toaster/toaster.hook";
 
 export default function OrderPendingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
+  const toaster = useToaster();
 
   useEffect(() => {
     if (!orderId) {
@@ -17,7 +19,8 @@ export default function OrderPendingPage() {
     }
 
     let intervalId: NodeJS.Timeout | null = null;
-    let timeoutId: NodeJS.Timeout | null = null;
+    let pollingAttempts = 0;
+    const MAX_POLLING_ATTEMPTS = 5; // 5 attempts * 3 seconds = 15 seconds timeout
 
     // 1. SSE Connection
     const eventSource = connectNotificationSSE();
@@ -25,7 +28,6 @@ export default function OrderPendingPage() {
     const cleanup = () => {
       eventSource.close();
       if (intervalId) clearInterval(intervalId);
-      if (timeoutId) clearTimeout(timeoutId);
     };
 
     const handleSuccess = () => {
@@ -56,8 +58,17 @@ export default function OrderPendingPage() {
 
     // 2. Polling Fallback
     const poll = async () => {
+      pollingAttempts++;
+      if (pollingAttempts > MAX_POLLING_ATTEMPTS) {
+        console.warn("Max polling attempts reached. Redirecting to mypage.");
+        cleanup();
+        toaster("warn", "결제 상태 확인이 지연되고 있습니다. 잠시 후 마이페이지에서 다시 확인해주세요.");
+        router.replace("/buyer/mypage");
+        return;
+      }
+
       try {
-        console.log("Polling for payment confirmation...");
+        console.log(`Polling for payment confirmation (Attempt ${pollingAttempts}/${MAX_POLLING_ATTEMPTS})...`);
         const response = await getNotifications({ page: 1, pageSize: 10 });
         const targetNotification = response.list.find(
           (n) => n.content.includes("주문이 완료되었습니다") && n.content.includes(orderId)
@@ -74,16 +85,9 @@ export default function OrderPendingPage() {
 
     intervalId = setInterval(poll, 3000);
 
-    // 3. Timeout
-    timeoutId = setTimeout(() => {
-      cleanup();
-      alert("결제 상태 확인이 지연되고 있습니다. 잠시 후 마이페이지에서 다시 확인해주세요.");
-      router.replace("/buyer/mypage");
-    }, 120000); // 2 minutes timeout
-
     // Component unmount cleanup
     return cleanup;
-  }, [orderId, router]);
+  }, [orderId, router, toaster]);
 
   return (
     <div className="flex h-screen flex-col items-center justify-center bg-gray-50">
